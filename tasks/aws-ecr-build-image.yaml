@@ -1,0 +1,71 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: aws-ecr-build-image
+spec:
+  params:
+    - name: IMAGE
+    - name: TAG
+    - name: SOURCE_SUBDIRECTORY
+      default: ''
+    - name: AWS_ACCOUNT_ID
+    - name: AWS_REGION
+    - name: AWS_CREDENTIALS_SECRET
+      default: aws-credentials
+    - name: VERBOSITY
+      default: info
+  workspaces:
+    - name: source
+  steps:
+    - name: configure
+      image: alpine
+      script: |
+        #!/bin/sh
+
+        echo -n "{
+          \"credHelpers\": {
+            \"public.ecr.aws\": \"ecr-login\",
+            \"$(params.AWS_ACCOUNT_ID).dkr.ecr.$(params.AWS_REGION).amazonaws.com\": \"ecr-login\"
+          }
+        }" > /kaniko/.docker/config.json
+
+        mkdir /root/.aws
+
+        echo "[default]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY" > /root/.aws/credentails
+      volumeMounts:
+        - name: aws-secret
+          mountPath: /root/.aws
+        - name: docker-config
+          mountPath: /kaniko/.docker
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: $(params.AWS_CREDENTIALS_SECRET)
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: $(params.AWS_CREDENTIALS_SECRET)
+              key: AWS_SECRET_ACCESS_KEY
+
+    - name: build
+      image: gcr.io/kaniko-project/executor:v1.7.0
+      args:
+        - "--dockerfile=$(workspaces.source.path)/$(params.SOURCE_SUBDIRECTORY)/Dockerfile"
+        - "--context=dir://$(workspaces.source.path)/$(params.SOURCE_SUBDIRECTORY)"
+        - "--destination=$(params.AWS_ACCOUNT_ID).dkr.ecr.$(params.AWS_REGION).amazonaws.com/$(params.IMAGE):$(params.TAG)"
+        - "--verbosity=$(params.VERBOSITY)"
+      volumeMounts:
+        - name: aws-secret
+          mountPath: /root/.aws
+        - name: docker-config
+          mountPath: /kaniko/.docker/
+
+  volumes:
+    - name: aws-secret
+      emptyDir: {}
+    - name: docker-config
+      emptyDir: {}

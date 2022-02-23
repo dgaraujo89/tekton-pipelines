@@ -1,0 +1,55 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: github-pull-request
+spec:
+  params:
+    - name: git_repository_name
+      description: The repository name
+    - name: git_repository_full_name
+      description: The repository full name
+    - name: git_repository_url
+      description: The repository git url
+    - name: git_revision
+      description: The git revision
+    - name: git_pull_request_url
+      description: The pull request url
+    - name: git_pull_request_id
+      description: The pull request id
+    - name: git_pull_request_sha
+      description: The pull request sha
+    - name: build_image
+      description: Specifies whether the image should be built
+    - name: truncated_sha
+      description: The truncated sha
+  resourceTemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: $(tt.params.git_repository_name)-
+      spec:
+        workspaces:
+          - name: source
+            persistentVolumeClaim:
+              claimName: github-pipeline-workspace
+        params:
+          - name: git_repository_name
+            value: $(tt.params.git_repository_name)
+          - name: git_repository_full_name
+            value: $(tt.params.git_repository_full_name)
+          - name: git_repository_url
+            value: $(tt.params.git_repository_url)
+          - name: git_revision
+            value: $(tt.params.git_revision)
+          - name: git_pull_request_url
+            value: $(tt.params.git_pull_request_url)
+          - name: git_pull_request_id
+            value: $(tt.params.git_pull_request_id)
+          - name: git_pull_request_sha
+            value: $(tt.params.git_pull_request_sha)
+          - name: build_image
+            value: $(tt.params.build_image)
+          - name: truncated_sha
+            value: $(tt.params.truncated_sha)
+        pipelineRef:
+          name: $(tt.params.git_repository_name)-pr

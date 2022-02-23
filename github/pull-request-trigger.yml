@@ -1,0 +1,46 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: github-pull-request
+spec:
+  interceptors:
+    - ref:
+        name: "github"
+        kind: ClusterInterceptor
+        apiVersion: triggers.tekton.dev
+      params:
+        - name: "secretRef"
+          value:
+            secretName: github-secret
+            secretKey: secretToken
+        - name: "eventTypes"
+          value: ["pull_request"]
+    - ref:
+        name: 'cel'
+      params:
+        - name: 'filter'
+          value: "body.action in ['opened', 'reopened', 'synchronize', 'labeled']"
+    - ref:
+        name: 'cel'
+      params:
+        - name: 'filter'
+          value: "body.pull_request.base.ref in ['master', 'main']"
+    - ref:
+        name: 'cel'
+      params:
+        - name: "overlays"
+          value:
+            - key: build_image
+              expression: "body.pull_request.labels.exists(x, x.name == 'build-image')"
+    - ref:
+        name: 'cel'
+      params:
+        - name: "overlays"
+          value:
+            - key: truncated_sha
+              expression: "body.pull_request.head.sha.truncate(7)"
+  bindings:
+    - ref: github-pull-request
+      kind: ClusterTriggerBinding
+  template:
+    ref: github-pull-request

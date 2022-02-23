@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: el-github-webhook
+  labels:
+    name: el-github-webhook
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: github.example.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: el-github-webhook
+            port: 
+              number: 8080

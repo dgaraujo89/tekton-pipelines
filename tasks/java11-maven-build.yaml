@@ -1,0 +1,15 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: java11-maven-build
+spec:
+  params:
+    - name: SUBDIRECTORY
+      default: ''
+  steps:
+    - name: build
+      image: maven:3.8.4-jdk-11
+      script: |
+        mvn package -f $(workspaces.source.path)/$(params.SUBDIRECTORY)/pom.xml
+  workspaces:
+    - name: source

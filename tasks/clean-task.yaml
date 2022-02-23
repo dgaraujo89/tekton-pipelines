@@ -1,0 +1,14 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: clean-source
+spec:
+  params:
+    - name: directory
+  steps:
+    - name: clean
+      image: alpine
+      script: |
+        rm -rf $(params.directory)
+  workspaces:
+    - name: source

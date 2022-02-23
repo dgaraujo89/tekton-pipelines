@@ -1,0 +1,179 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: demo-pipeline-tekton-pr
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: git_repository_name
+    - name: git_repository_full_name
+    - name: git_repository_url
+    - name: git_revision
+    - name: git_pull_request_url
+    - name: git_pull_request_id
+    - name: git_pull_request_sha
+    - name: build_image
+    - name: truncated_sha
+    - name: target_url
+      default: "https://tkn.example.com/#/namespaces/tekton-pipelines/pipelineruns"
+  tasks:
+    - name: set-status-pending
+      taskRef:
+        name: github-set-status
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.git_repository_full_name)
+        - name: SHA
+          value: $(params.git_pull_request_sha)
+        - name: DESCRIPTION
+          value: "Checks has started"
+        - name: STATE
+          value: pending
+        - name: TARGET_URL
+          value: "$(params.target_url)/$(context.pipelineRun.name)"
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      params:
+        - name: url
+          value: $(params.git_repository_url)
+        - name: revision
+          value: $(params.git_revision)
+        - name: subdirectory
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)
+      workspaces:
+        - name: output
+          workspace: source
+
+    - name: compile
+      taskRef:
+        name: java11-maven-build
+      runAfter:
+        - fetch-source
+      params:
+        - name: SUBDIRECTORY
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/
+      workspaces:
+        - name: source
+          workspace: source
+
+    - name: build-image
+      taskRef:
+        name: dockerhub-build-image
+      runAfter:
+        - compile
+      when:
+        - input: "$(params.build_image)"
+          operator: in
+          values: ["true"]
+      params:
+        - name: IMAGE
+          value: $(params.git_repository_name)
+        - name: TAG
+          value: $(params.truncated_sha)-SNAPSHOT
+        - name: SOURCE_SUBDIRECTORY
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/
+        - name: PROJECT
+          value: diegogomesaraujo
+      workspaces:
+        - name: source
+          workspace: source
+  finally:
+    - name: clean-source
+      taskRef:
+        name: clean-source
+      params:
+        - name: directory
+          value: /workspace/source/$(params.git_repository_name)/$(params.git_pull_request_sha)
+      workspaces:
+        - name: source
+          workspace: source
+    
+    - name: compile-status-success
+      taskRef:
+        name: github-set-status
+      when:
+        - input: "$(tasks.compile.status)"
+          operator: in
+          values: ["Succeeded"]
+        - input: "$(params.build_image)"
+          operator: in
+          values: ["false"]
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.git_repository_full_name)
+        - name: SHA
+          value: $(params.git_pull_request_sha)
+        - name: DESCRIPTION
+          value: "Compile successful"
+        - name: STATE
+          value: success
+        - name: TARGET_URL
+          value: "$(params.target_url)/$(context.pipelineRun.name)"
+
+    - name: compile-status-failure
+      taskRef:
+        name: github-set-status
+      when:
+        - input: "$(tasks.compile.status)"
+          operator: in
+          values: ["Failed"]
+        - input: "$(params.build_image)"
+          operator: in
+          values: ["false"]
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.git_repository_full_name)
+        - name: SHA
+          value: $(params.git_pull_request_sha)
+        - name: DESCRIPTION
+          value: "Compile failed"
+        - name: STATE
+          value: failure
+        - name: TARGET_URL
+          value: "$(params.target_url)/$(context.pipelineRun.name)"
+
+    - name: build-image-status-success
+      taskRef:
+        name: github-set-status
+      when:
+        - input: "$(tasks.status)"
+          operator: in
+          values: ["Succeeded"]
+        - input: "$(params.build_image)"
+          operator: in
+          values: ["true"]
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.git_repository_full_name)
+        - name: SHA
+          value: $(params.git_pull_request_sha)
+        - name: DESCRIPTION
+          value: "Build successful tag: $(params.truncated_sha)-SNAPSHOT"
+        - name: STATE
+          value: success
+        - name: TARGET_URL
+          value: "$(params.target_url)/$(context.pipelineRun.name)"
+          
+    - name: build-image-status-failure
+      taskRef:
+        name: github-set-status
+      when:
+        - input: "$(tasks.status)"
+          operator: in
+          values: ["Failed"]
+        - input: "$(params.build_image)"
+          operator: in
+          values: ["true"]
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.git_repository_full_name)
+        - name: SHA
+          value: $(params.git_pull_request_sha)
+        - name: DESCRIPTION
+          value: "Build failed"
+        - name: STATE
+          value: failure
+        - name: TARGET_URL
+          value: "$(params.target_url)/$(context.pipelineRun.name)"

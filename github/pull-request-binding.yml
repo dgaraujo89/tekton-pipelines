@@ -1,0 +1,24 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: ClusterTriggerBinding
+metadata:
+  name: github-pull-request
+spec:
+  params:
+    - name: git_repository_name
+      value: $(body.pull_request.head.repo.name)
+    - name: git_repository_full_name
+      value: $(body.pull_request.head.repo.full_name)
+    - name: git_repository_url
+      value: $(body.pull_request.head.repo.git_url)
+    - name: git_revision
+      value: $(body.pull_request.head.ref)
+    - name: git_pull_request_url
+      value: $(body.pull_request.url)
+    - name: git_pull_request_id
+      value: $(body.pull_request.id)
+    - name: git_pull_request_sha
+      value: $(body.pull_request.head.sha)
+    - name: build_image
+      value: $(extensions.build_image)
+    - name: truncated_sha
+      value: $(extensions.truncated_sha)
