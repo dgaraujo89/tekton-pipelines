@@ -1,0 +1,35 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: helm-package
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: CHART_NAME
+    - name: CHART_DIRECTORY
+    - name: CHART_VERSION
+    - name: CHARTS_DIRECTORY
+    - name: CHART_REPO_URL
+    - name: CONTAINER_IMAGE
+  steps:
+    - name: package
+      image: diegogomesaraujo/command-base-ubuntu
+      script: |
+        #!/bin/sh
+
+        CHART_DIRECTORY=$(workspaces.source.path)/$(params.CHART_DIRECTORY)
+        CHARTS_DIRECTORY=$(workspaces.source.path)/$(params.CHARTS_DIRECTORY)
+        INDEX_FILE=$CHARTS_DIRECTORY/index.yaml
+
+        if [ ! -d "$CHARTS_DIRECTORY" ]; then
+          mkdir $CHARTS_DIRECTORY 
+        fi
+
+        sed -i 's/{version}/$(params.CHART_VERSION)/g' $CHART_DIRECTORY/Chart.yaml
+        sed -i -e 's/{version}/$(params.CHART_VERSION)/g' -e 's+{image}+$(params.CONTAINER_IMAGE)+g' $CHART_DIRECTORY/values.yaml
+
+        helm package $CHART_DIRECTORY --destination $CHARTS_DIRECTORY
+
+        helm repo index $CHARTS_DIRECTORY --url $(params.CHART_REPO_URL) 
+        

@@ -5,18 +5,22 @@ metadata:
 spec:
   workspaces:
     - name: source
+    - name: ssh-credentials
   params:
     - name: git_repository_name
     - name: git_repository_full_name
     - name: git_repository_url
+    - name: git_repository_ssh_url
     - name: git_revision
     - name: git_pull_request_url
     - name: git_pull_request_id
     - name: git_pull_request_sha
+    - name: git_pull_request_number
+    - name: git_pull_request_base
     - name: build_image
     - name: truncated_sha
     - name: target_url
-      default: "https://tkn.example.com/#/namespaces/tekton-pipelines/pipelineruns"
+      default: "https://tkn.example.com/#/namespaces/<pipeline namespace>/pipelineruns"
   tasks:
     - name: set-status-pending
       taskRef:
@@ -32,19 +36,23 @@ spec:
           value: pending
         - name: TARGET_URL
           value: "$(params.target_url)/$(context.pipelineRun.name)"
+
     - name: fetch-source
       taskRef:
         name: git-clone
       params:
         - name: url
-          value: $(params.git_repository_url)
+          value: $(params.git_repository_ssh_url)
         - name: revision
           value: $(params.git_revision)
         - name: subdirectory
-          value: $(params.git_repository_name)/$(params.git_pull_request_sha)
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/source
       workspaces:
         - name: output
           workspace: source
+          subPath: src
+        - name: ssh-directory
+          workspace: ssh-credentials
 
     - name: compile
       taskRef:
@@ -53,10 +61,14 @@ spec:
         - fetch-source
       params:
         - name: SUBDIRECTORY
-          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/source/
       workspaces:
         - name: source
           workspace: source
+          subPath: src
+        - name: maven-cache
+          workspace: source
+          subPath: maven-cache
 
     - name: build-image
       taskRef:
@@ -71,14 +83,79 @@ spec:
         - name: IMAGE
           value: $(params.git_repository_name)
         - name: TAG
-          value: $(params.truncated_sha)-SNAPSHOT
+          value: 0.0.$(params.git_pull_request_number)-snapshot.$(params.truncated_sha)
         - name: SOURCE_SUBDIRECTORY
-          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/source/
         - name: PROJECT
-          value: diegogomesaraujo
+          value: <docker hub project name>
       workspaces:
         - name: source
           workspace: source
+          subPath: src
+
+    - name: fetch-charts-source
+      taskRef:
+        name: git-clone
+      runAfter:
+        - build-image
+      params:
+        - name: url
+          value: $(params.git_repository_ssh_url)
+        - name: revision
+          value: gh-pages
+        - name: subdirectory
+          value: $(params.git_repository_name)/gh-pages
+      workspaces:
+        - name: output
+          workspace: source
+          subPath: src
+        - name: ssh-directory
+          workspace: ssh-credentials
+
+    - name: build-chart
+      taskRef:
+        name: helm-package
+      runAfter:
+        - fetch-charts-source
+      params:
+        - name: CHART_NAME
+          value: $(params.git_repository_name)
+        - name: CHART_VERSION
+          value: 0.0.$(params.git_pull_request_number)-snapshot.$(params.truncated_sha)
+        - name: CHART_DIRECTORY
+          value: $(params.git_repository_name)/$(params.git_pull_request_sha)/source/.helm
+        - name: CHARTS_DIRECTORY
+          value: $(params.git_repository_name)/gh-pages/docs/charts
+        - name: CHART_REPO_URL
+          value: https://<github org name>.github.io/demo-pipeline-tekton/charts
+        - name: CONTAINER_IMAGE
+          value: <docker hub project name>/$(params.git_repository_name):0.0.$(params.git_pull_request_number)-snapshot.$(params.truncated_sha)
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src
+
+    - name: push-chart
+      taskRef:
+        name: git-cli
+      runAfter:
+        - build-chart
+      params:
+        - name: GIT_USER_NAME
+          value: <name>
+        - name: GIT_USER_EMAIL
+          value: <email>
+        - name: GIT_SCRIPT
+          value: |
+            git add .
+            git commit -m "build chart: $(params.git_repository_name)-0.0.$(params.git_pull_request_number)-snapshot.$(params.truncated_sha)"
+            git push origin HEAD:gh-pages
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src/$(params.git_repository_name)/gh-pages
+        - name: ssh-directory
+          workspace: ssh-credentials
   finally:
     - name: clean-source
       taskRef:
@@ -89,6 +166,7 @@ spec:
       workspaces:
         - name: source
           workspace: source
+          subPath: src
     
     - name: compile-status-success
       taskRef:
@@ -150,7 +228,7 @@ spec:
         - name: SHA
           value: $(params.git_pull_request_sha)
         - name: DESCRIPTION
-          value: "Build successful tag: $(params.truncated_sha)-SNAPSHOT"
+          value: "Build successful tag: 0.0.$(params.git_pull_request_number)-snapshot.$(params.truncated_sha)"
         - name: STATE
           value: success
         - name: TARGET_URL

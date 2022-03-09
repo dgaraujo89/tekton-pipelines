@@ -1,7 +1,7 @@
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
 metadata:
-  name: github-pull-request
+  name: github-merged
 spec:
   interceptors:
     - ref:
@@ -19,7 +19,7 @@ spec:
         name: 'cel'
       params:
         - name: 'filter'
-          value: "body.action in ['opened', 'reopened', 'synchronize', 'labeled']"
+          value: "body.action in ['closed']"
     - ref:
         name: 'cel'
       params:
@@ -30,17 +30,10 @@ spec:
       params:
         - name: "overlays"
           value:
-            - key: build_image
-              expression: "body.pull_request.labels.exists(x, x.name == 'build-image')"
-    - ref:
-        name: 'cel'
-      params:
-        - name: "overlays"
-          value:
             - key: truncated_sha
               expression: "body.pull_request.head.sha.truncate(7)"
   bindings:
-    - ref: github-pull-request
+    - ref: github-merged
       kind: TriggerBinding
   template:
-    ref: github-pull-request
+    ref: github-merged

@@ -1,7 +1,7 @@
 apiVersion: triggers.tekton.dev/v1beta1
 kind: TriggerBinding
 metadata:
-  name: github-pull-request
+  name: github-merged
 spec:
   params:
     - name: git_repository_name
@@ -24,7 +24,5 @@ spec:
       value: $(body.pull_request.head.sha)
     - name: git_pull_request_base
       value: $(body.pull_request.base.ref)
-    - name: build_image
-      value: $(extensions.build_image)
     - name: truncated_sha
       value: $(extensions.truncated_sha)

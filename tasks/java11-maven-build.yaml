@@ -13,3 +13,5 @@ spec:
         mvn package -f $(workspaces.source.path)/$(params.SUBDIRECTORY)/pom.xml
   workspaces:
     - name: source
+    - name: maven-cache
+      mountPath: /root/.m2/repository

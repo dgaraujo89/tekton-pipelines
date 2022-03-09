@@ -1,0 +1,46 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: github-taged
+spec:
+  params:
+    - name: git_ref
+      description: The tag name
+    - name: git_ref_type
+      description: The ref type always tag
+    - name: git_repository_name
+      description: The repository name
+    - name: git_repository_url
+      description: The repository git url
+    - name: git_repository_ssh_url
+      description: The repository git ssh url
+    - name: git_repository_full_name
+      description: The repository full name
+  resourceTemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: $(tt.params.git_repository_name)-$(tt.params.git_ref)-release-
+      spec:
+        workspaces:
+          - name: source
+            persistentVolumeClaim:
+              claimName: github-pipeline-workspace
+          - name: ssh-credentials
+            secret:
+              secretName: github-ssh-credentials
+        params:
+          - name: git_ref
+            value: $(tt.params.git_ref)
+          - name: git_ref_type
+            value: $(tt.params.git_ref_type)
+          - name: git_repository_name
+            value: $(tt.params.git_repository_name)
+          - name: git_repository_url
+            value: $(tt.params.git_repository_url)
+          - name: git_repository_ssh_url
+            value: $(tt.params.git_repository_ssh_url)
+          - name: git_repository_full_name
+            value: $(tt.params.git_repository_full_name)
+        pipelineRef:
+          name: $(tt.params.git_repository_name)-release

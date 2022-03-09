@@ -1,0 +1,148 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: demo-pipeline-tekton-release
+spec:
+  workspaces:
+    - name: source
+    - name: ssh-credentials
+  params:
+    - name: git_ref
+      description: The tag name
+    - name: git_ref_type
+      description: The ref type always tag
+    - name: git_repository_name
+      description: The repository name
+    - name: git_repository_url
+      description: The repository git url
+    - name: git_repository_ssh_url
+      description: The repository git ssh url
+    - name: git_repository_full_name
+      description: The repository full name
+  tasks:
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      params:
+        - name: url
+          value: $(params.git_repository_ssh_url)
+        - name: revision
+          value: $(params.git_ref)
+        - name: subdirectory
+          value: $(params.git_repository_name)/$(params.git_ref)/source
+      workspaces:
+        - name: output
+          workspace: source
+          subPath: src
+        - name: ssh-directory
+          workspace: ssh-credentials
+
+    - name: compile
+      taskRef:
+        name: java11-maven-build
+      runAfter:
+        - fetch-source
+      params:
+        - name: SUBDIRECTORY
+          value: $(params.git_repository_name)/$(params.git_ref)/source/
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src
+        - name: maven-cache
+          workspace: source
+          subPath: maven-cache
+
+    - name: build-image
+      taskRef:
+        name: dockerhub-build-image
+      runAfter:
+        - compile
+      params:
+        - name: IMAGE
+          value: $(params.git_repository_name)
+        - name: TAG
+          value: $(params.git_ref)
+        - name: SOURCE_SUBDIRECTORY
+          value: $(params.git_repository_name)/$(params.git_ref)/source/
+        - name: PROJECT
+          value: <docker hub project name>
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src
+
+    - name: fetch-charts-source
+      taskRef:
+        name: git-clone
+      runAfter:
+        - build-image
+      params:
+        - name: url
+          value: $(params.git_repository_ssh_url)
+        - name: revision
+          value: gh-pages
+        - name: subdirectory
+          value: $(params.git_repository_name)/gh-pages
+      workspaces:
+        - name: output
+          workspace: source
+          subPath: src
+        - name: ssh-directory
+          workspace: ssh-credentials
+
+    - name: build-chart
+      taskRef:
+        name: helm-package
+      runAfter:
+        - fetch-charts-source
+      params:
+        - name: CHART_NAME
+          value: $(params.git_repository_name)
+        - name: CHART_VERSION
+          value: $(params.git_ref)
+        - name: CHART_DIRECTORY
+          value: $(params.git_repository_name)/$(params.git_ref)/source/.helm
+        - name: CHARTS_DIRECTORY
+          value: $(params.git_repository_name)/gh-pages/docs/charts
+        - name: CHART_REPO_URL
+          value: https://<github org name>.github.io/demo-pipeline-tekton/charts
+        - name: CONTAINER_IMAGE
+          value: <docker hub project name>/$(params.git_repository_name):$(params.git_ref)
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src
+
+    - name: push-chart
+      taskRef:
+        name: git-cli
+      runAfter:
+        - build-chart
+      params:
+        - name: GIT_USER_NAME
+          value: <name>
+        - name: GIT_USER_EMAIL
+          value: <email>
+        - name: GIT_SCRIPT
+          value: |
+            git add .
+            git commit -m "build chart: $(params.git_repository_name)-$(params.git_ref)"
+            git push origin HEAD:gh-pages
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src/$(params.git_repository_name)/gh-pages
+        - name: ssh-directory
+          workspace: ssh-credentials
+  finally:
+    - name: clean-source
+      taskRef:
+        name: clean-source
+      params:
+        - name: directory
+          value: /workspace/source/$(params.git_repository_name)/$(params.git_ref)
+      workspaces:
+        - name: source
+          workspace: source
+          subPath: src

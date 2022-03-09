@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: github-pipeline-workspace
+  name: maven-cache
 spec:
   storageClassName: hostpath
   resources:

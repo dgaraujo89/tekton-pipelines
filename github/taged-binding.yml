@@ -1,0 +1,18 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: github-taged
+spec:
+  params:
+    - name: git_ref
+      value: $(body.ref)
+    - name: git_ref_type
+      value: $(body.ref_type)
+    - name: git_repository_name
+      value: $(body.repository.name)
+    - name: git_repository_url
+      value: $(body.repository.git_url)
+    - name: git_repository_ssh_url
+      value: $(body.repository.ssh_url)
+    - name: git_repository_full_name
+      value: $(body.repository.full_name)

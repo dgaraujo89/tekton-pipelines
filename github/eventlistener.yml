@@ -6,3 +6,5 @@ spec:
   serviceAccountName: github-webhook
   triggers:
     - triggerRef: github-pull-request
+    - triggerRef: github-merged
+    - triggerRef: github-taged
